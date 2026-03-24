@@ -48,9 +48,9 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
+          let currentText: MessageV2.TextPart | undefined
+          let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
           try {
-            let currentText: MessageV2.TextPart | undefined
-            let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -398,6 +398,11 @@ export namespace SessionProcessor {
               })
             }
             snapshot = undefined
+          }
+          // Save partial text that accumulated before abort
+          if (currentText && currentText.text !== "") {
+            currentText.time = { start: currentText.time?.start ?? Date.now(), end: Date.now() }
+            await Session.updatePart(currentText)
           }
           const p = await MessageV2.parts(input.assistantMessage.id)
           for (const part of p) {
