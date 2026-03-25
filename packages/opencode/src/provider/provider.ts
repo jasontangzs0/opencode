@@ -1263,14 +1263,46 @@ export namespace Provider {
           const body = JSON.parse(opts.body as string)
           const isAzure = model.providerID.includes("azure")
           const keepIds = isAzure && body.store === true
-          if (!keepIds && Array.isArray(body.input)) {
-            for (const item of body.input) {
-              if ("id" in item) {
-                delete item.id
+          if (Array.isArray(body.input)) {
+            // Strip IDs unless Azure with store=true
+            if (!keepIds) {
+              for (const item of body.input) {
+                if ("id" in item) {
+                  delete item.id
+                }
               }
             }
-            opts.body = JSON.stringify(body)
+            // Fix items for Azure Responses API compatibility:
+            // 1. Add missing type: "message" to items that have role but no type
+            // 2. Filter out items with empty content
+            body.input = body.input
+              .map((item: any) => {
+                if (!item.type && item.role) {
+                  item.type = "message"
+                }
+                return item
+              })
+              .filter((item: any) => {
+                if (item.type === "message" && Array.isArray(item.content)) {
+                  item.content = item.content.filter((c: any) => {
+                    if (c.type === "input_text" || c.type === "output_text") return c.text !== ""
+                    return true
+                  })
+                  return item.content.length > 0
+                }
+                if (item.type === "message" && typeof item.content === "string") {
+                  return item.content !== ""
+                }
+                return true
+              })
           }
+          // Add nested reasoning params for Azure (which rejects the flat reasoningSummary format)
+          // Reads effort from provider options.reasoningEffort, defaults to "medium"
+          if (isAzure && !body.reasoning) {
+            const effort = options["reasoningEffort"] ?? "medium"
+            body.reasoning = { effort, summary: "auto" }
+          }
+          opts.body = JSON.stringify(body)
         }
 
         const res = await fetchFn(input, {
