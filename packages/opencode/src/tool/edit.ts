@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { FileSnapshot } from "../session/file-snapshot"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -70,6 +71,15 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
+        await FileSnapshot.capture({
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          files: [{
+            filePath,
+            beforeContent: contentOld,
+            existed,
+          }],
+        })
         await Filesystem.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
@@ -105,6 +115,15 @@ export const EditTool = Tool.define("edit", {
           filepath: filePath,
           diff,
         },
+      })
+      await FileSnapshot.capture({
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        files: [{
+          filePath,
+          beforeContent: contentOld,
+          existed: true,
+        }],
       })
 
       await Filesystem.write(filePath, contentNew)

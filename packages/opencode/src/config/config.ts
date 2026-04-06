@@ -1053,10 +1053,10 @@ export namespace Config {
         .optional(),
       plugin: z.string().array().optional(),
       snapshot: z
-        .boolean()
+        .union([z.boolean(), z.enum(["git", "file"])])
         .optional()
         .describe(
-          "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+          'Snapshot strategy: true or "git" (default) uses git-based full-tree snapshots. "file" captures only files modified by tools (no git dependency, works with large workspaces). false disables snapshots entirely.',
         ),
       share: z
         .enum(["manual", "auto", "disabled"])

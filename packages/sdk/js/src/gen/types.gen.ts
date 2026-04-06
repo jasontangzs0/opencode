@@ -556,6 +556,11 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+    fileContents?: Array<{
+      filePath: string
+      content: string
+      exists: boolean
+    }>
   }
 }
 

@@ -155,6 +155,18 @@ export namespace Session {
           partID: PartID.zod.optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
+          fileContents: z
+            .array(
+              z.object({
+                filePath: z.string(),
+                content: z.string(),
+                exists: z.boolean(),
+                status: z.enum(["added", "deleted", "modified"]).optional(),
+                additions: z.number().optional(),
+                deletions: z.number().optional(),
+              }),
+            )
+            .optional(),
         })
         .optional(),
     })

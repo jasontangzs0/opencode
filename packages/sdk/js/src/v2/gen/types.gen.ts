@@ -474,6 +474,18 @@ export type PatchPart = {
   files: Array<string>
 }
 
+export type FileSnapshotPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "file-snapshot"
+  files: Array<{
+    filePath: string
+    beforeContent: string
+    existed: boolean
+  }>
+}
+
 export type AgentPart = {
   id: string
   sessionID: string
@@ -518,6 +530,7 @@ export type Part =
   | StepFinishPart
   | SnapshotPart
   | PatchPart
+  | FileSnapshotPart
   | AgentPart
   | RetryPart
   | CompactionPart
@@ -835,6 +848,11 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+    fileContents?: Array<{
+      filePath: string
+      content: string
+      exists: boolean
+    }>
   }
 }
 
@@ -1706,6 +1724,11 @@ export type GlobalSession = {
     partID?: string
     snapshot?: string
     diff?: string
+    fileContents?: Array<{
+      filePath: string
+      content: string
+      exists: boolean
+    }>
   }
   project: ProjectSummary | null
 }

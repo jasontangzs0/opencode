@@ -1,5 +1,6 @@
 import z from "zod"
 import * as path from "path"
+import * as fs from "fs/promises"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
@@ -12,6 +13,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
+import { FileSnapshot } from "../session/file-snapshot"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -19,8 +21,9 @@ const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
-    content: z.string().describe("The content to write to the file"),
+    content: z.string().optional().describe("The content to write to the file (omit when deleting)"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
+    delete: z.boolean().optional().describe("Set to true to delete the file instead of writing"),
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
@@ -30,7 +33,32 @@ export const WriteTool = Tool.define("write", {
     const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+    if (params.delete) {
+      if (!exists) throw new Error(`File does not exist: ${filepath}`)
+      const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, ""))
+      await ctx.ask({
+        permission: "edit",
+        patterns: [path.relative(Instance.worktree, filepath)],
+        always: ["*"],
+        metadata: { filepath, diff },
+      })
+      await FileSnapshot.capture({
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        files: [{ filePath: filepath, beforeContent: contentOld, existed: true }],
+      })
+      await fs.unlink(filepath)
+      await Bus.publish(File.Event.Edited, { file: filepath })
+      await Bus.publish(FileWatcher.Event.Updated, { file: filepath, event: "unlink" })
+      return {
+        title: `Deleted ${path.relative(Instance.worktree, filepath)}`,
+        metadata: { diagnostics: {}, filepath, exists: false },
+        output: "File deleted successfully.",
+      }
+    }
+
+    const content = params.content ?? ""
+    const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, content))
     await ctx.ask({
       permission: "edit",
       patterns: [path.relative(Instance.worktree, filepath)],
@@ -40,8 +68,17 @@ export const WriteTool = Tool.define("write", {
         diff,
       },
     })
+    await FileSnapshot.capture({
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      files: [{
+        filePath: filepath,
+        beforeContent: contentOld,
+        existed: exists,
+      }],
+    })
 
-    await Filesystem.write(filepath, params.content)
+    await Filesystem.write(filepath, content)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

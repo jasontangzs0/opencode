@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { FileSnapshot } from "../session/file-snapshot"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -182,6 +183,26 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         diff: totalDiff,
         files,
       },
+    })
+    await FileSnapshot.capture({
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      files: fileChanges.flatMap((change) => {
+        const entries = [{
+          filePath: change.filePath,
+          beforeContent: change.oldContent,
+          existed: change.type !== "add",
+        }]
+        // For move operations, also capture the destination so revert can clean it up
+        if (change.movePath) {
+          entries.push({
+            filePath: change.movePath,
+            beforeContent: "",
+            existed: false,
+          })
+        }
+        return entries
+      }),
     })
 
     // Apply the changes

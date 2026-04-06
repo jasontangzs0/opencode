@@ -3,6 +3,7 @@ import { Log } from "@/util/log"
 import { Session } from "."
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
+import { FileSnapshot } from "./file-snapshot"
 import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
@@ -46,6 +47,7 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
+        const fileSnapshotMode = await FileSnapshot.isEnabledFromConfig()
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           let currentText: MessageV2.TextPart | undefined
@@ -232,7 +234,9 @@ export namespace SessionProcessor {
                   throw value.error
 
                 case "start-step":
-                  snapshot = await Snapshot.track()
+                  if (!fileSnapshotMode) {
+                    snapshot = await Snapshot.track()
+                  }
                   await Session.updatePart({
                     id: PartID.ascending(),
                     messageID: input.assistantMessage.id,
@@ -254,7 +258,7 @@ export namespace SessionProcessor {
                   await Session.updatePart({
                     id: PartID.ascending(),
                     reason: value.finishReason,
-                    snapshot: await Snapshot.track(),
+                    snapshot: fileSnapshotMode ? undefined : await Snapshot.track(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
@@ -262,7 +266,7 @@ export namespace SessionProcessor {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.assistantMessage)
-                  if (snapshot) {
+                  if (!fileSnapshotMode && snapshot) {
                     const patch = await Snapshot.patch(snapshot)
                     if (patch.files.length) {
                       await Session.updatePart({
@@ -385,7 +389,7 @@ export namespace SessionProcessor {
               SessionStatus.set(input.sessionID, { type: "idle" })
             }
           }
-          if (snapshot) {
+          if (!fileSnapshotMode && snapshot) {
             const patch = await Snapshot.patch(snapshot)
             if (patch.files.length) {
               await Session.updatePart({

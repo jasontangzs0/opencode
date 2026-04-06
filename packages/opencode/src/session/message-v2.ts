@@ -101,6 +101,20 @@ export namespace MessageV2 {
   })
   export type PatchPart = z.infer<typeof PatchPart>
 
+  export const FileSnapshotPart = PartBase.extend({
+    type: z.literal("file-snapshot"),
+    files: z.array(
+      z.object({
+        filePath: z.string(),
+        beforeContent: z.string(),
+        existed: z.boolean(),
+      }),
+    ),
+  }).meta({
+    ref: "FileSnapshotPart",
+  })
+  export type FileSnapshotPart = z.infer<typeof FileSnapshotPart>
+
   export const TextPart = PartBase.extend({
     type: z.literal("text"),
     text: z.string(),
@@ -385,6 +399,7 @@ export namespace MessageV2 {
       StepFinishPart,
       SnapshotPart,
       PatchPart,
+      FileSnapshotPart,
       AgentPart,
       RetryPart,
       CompactionPart,
