@@ -319,10 +319,15 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+      // Backport of upstream's exit check: link assistant -> user via parentID
+      // instead of comparing ID strings. Ascending IDs are 48-bit truncated and
+      // wrapped on 2026-08-14T11:19:55Z, so every pre-wrap assistant ID string-sorts
+      // above every post-wrap user ID, which made this exit fire on any new prompt
+      // in a pre-wrap session.
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
+        lastAssistant.parentID === lastUser.id
       ) {
         log.info("exiting loop", { sessionID })
         break
@@ -634,7 +639,8 @@ export namespace SessionPrompt {
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
         for (const msg of msgs) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+          // time.created, not ID order: IDs don't sort across the 48-bit wrap
+          if (msg.info.role !== "user" || msg.info.time.created <= lastFinished.time.created) continue
           for (const part of msg.parts) {
             if (part.type !== "text" || part.ignored || part.synthetic) continue
             if (!part.text.trim()) continue
